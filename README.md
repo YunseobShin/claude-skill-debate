@@ -1,47 +1,43 @@
 # claude-skill-debate
 
-Claude(Anthropic)와 Codex/GPT(OpenAI)가 특정 주제에 대해 멀티턴 토론을 벌이고, 교차 팩트체크 후 HTML 판정 리포트를 자동 생성하는 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 스킬입니다.
+[![npm version](https://img.shields.io/npm/v/claude-skill-debate.svg)](https://www.npmjs.com/package/claude-skill-debate)
+[![license](https://img.shields.io/npm/l/claude-skill-debate.svg)](https://github.com/YunseobShin/claude-skill-debate/blob/master/LICENSE)
+
+A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill that orchestrates **multi-turn debates between Claude (Anthropic) and GPT (OpenAI)**, with cross fact-checking and automatic HTML verdict report generation.
 
 <p align="center">
-  <img src="assets/debate-flow.png" alt="Debate Flow" width="600">
+  <img src="assets/debate-flow.png" alt="Debate Flow" width="680">
 </p>
 
-## 특징
-
-- **독립 분석**: Claude와 GPT가 각각 독립적으로 주제를 분석
-- **멀티턴 토론**: 최대 5라운드 자유 토론 (수렴 시 자동 조기 종료)
-- **교차 팩트체크**: 양측이 상대방 핵심 주장 3개를 검증
-- **HTML 리포트**: Tailwind CSS 기반, 다크모드 지원 판정 리포트 자동 생성
-- **양비론 금지**: 근거가 강한 쪽의 손을 명확히 드는 판정
-
-## 전제 조건
-
-### 필수
-
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI 설치 및 인증
-- [OpenAI Codex CLI](https://github.com/openai/codex) 설치 및 인증
-
-### Codex CLI 설치
+## Install
 
 ```bash
-npm install -g @openai/codex
+npx claude-skill-debate
 ```
 
-인증은 ChatGPT Pro Plan 계정으로 로그인하거나, OpenAI API 키를 설정합니다:
+That's it. The skill file is copied to `~/.claude/skills/debate/SKILL.md` and ready to use.
+
+## Prerequisites
+
+| Requirement | Required | Notes |
+|---|---|---|
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Yes | CLI installed and authenticated |
+| [OpenAI Codex CLI](https://github.com/openai/codex) | Yes | `npm i -g @openai/codex` |
+| Codex MCP Server | No (recommended) | Enables multi-turn threading |
+
+### Codex CLI Auth
 
 ```bash
-# 방법 1: ChatGPT Pro Plan 인증 (무제한 토큰)
+# Option 1: ChatGPT Pro Plan (unlimited tokens)
 codex auth login
 
-# 방법 2: API 키 (과금됨)
+# Option 2: API key (usage-based billing)
 export OPENAI_API_KEY="sk-..."
 ```
 
-### 선택 (권장)
+### Codex MCP Server (Optional)
 
-Codex MCP 서버를 설정하면 멀티턴 토론이 가능하여 더 깊은 토론이 진행됩니다.
-
-`~/.claude/settings.json`에 추가:
+Add to `~/.claude/settings.json` for richer multi-turn debates:
 
 ```json
 {
@@ -54,128 +50,105 @@ Codex MCP 서버를 설정하면 멀티턴 토론이 가능하여 더 깊은 토
 }
 ```
 
-MCP가 없으면 자동으로 CLI fallback을 사용합니다 (매 라운드 전체 컨텍스트를 프롬프트에 포함).
+Without MCP, the skill automatically falls back to CLI mode (full context included in each round's prompt).
 
-## 설치
+## Usage
 
-### 방법 1: 수동 복사
-
-```bash
-# 스킬 디렉토리 생성
-mkdir -p ~/.claude/skills/debate
-
-# SKILL.md 복사
-cp SKILL.md ~/.claude/skills/debate/SKILL.md
-```
-
-### 방법 2: Git clone
-
-```bash
-git clone https://github.com/YOUR_USERNAME/claude-skill-debate.git
-mkdir -p ~/.claude/skills/debate
-cp claude-skill-debate/SKILL.md ~/.claude/skills/debate/SKILL.md
-```
-
-## 사용법
-
-Claude Code에서 `/debate` 뒤에 토론 주제를 입력합니다:
+In Claude Code, type `/debate` followed by any topic:
 
 ```
-/debate 삼성전자 2026년 하반기 주가 전망
+/debate Will AI replace software engineers?
+/debate React vs Vue for new projects in 2026
+/debate Tesla stock price outlook
+/debate Should medical AI regulation be relaxed?
 ```
 
-```
-/debate React vs Vue 2026년 신규 프로젝트 기준
-```
+Natural language also works:
 
 ```
-/debate AI가 프로그래머를 대체할 수 있는가
+"Have two AIs debate this topic"
+"Ask Claude and GPT about this"
 ```
 
-```
-/debate 의료 AI SaMD 규제 완화 찬반
-```
-
-자연어로도 호출 가능합니다:
+## How It Works
 
 ```
-"이 주제로 AI 두 마리 토론시켜줘"
-"Claude랑 GPT한테 물어봐"
+Phase 0  Preparation
+         Topic → Extract 3-5 key arguments → Generate debate rules
+
+Phase 1  Independent Analysis (parallel)
+         Claude sub-agent ──┐
+                            ├──→ 500-800 word analysis each
+         Codex (MCP/CLI) ───┘
+
+Phase 2  Free Debate (up to 5 rounds)
+         ┌─ Round 1: Claude opens → Codex rebuts
+         ├─ Round 2: Codex opens  → Claude rebuts
+         ├─ ...
+         └─ Convergence check: early exit if no new arguments
+
+Phase 3  Cross Fact-Check
+         Claude → verifies top 3 GPT claims
+         Codex  → verifies top 3 Claude claims
+
+Phase 4  Verdict Report
+         Separate Reporter agent reads full transcript
+         → generates HTML report with Tailwind CSS + dark mode
+
+Phase 5  Done
+         Auto-opens report in browser + prints summary
 ```
 
-## 토론 흐름
+## Output
 
-```
-Phase 0: 준비
-  주제 → 핵심 논점 3-5개 도출 → 토론 규칙 생성
+All debate artifacts are saved to `/tmp/debate/YYYYMMDD_HHMMSS/`:
 
-Phase 1: 독립 분석 (병렬)
-  Claude 서브에이전트 ──┐
-                        ├──→ 각각 500-800단어 분석문
-  Codex (MCP/CLI)  ─────┘
+| File | Description |
+|---|---|
+| `topic.md` | Topic & key arguments |
+| `rules.md` | Debate rules |
+| `analysis_claude.md` | Claude's independent analysis |
+| `analysis_codex.md` | GPT's independent analysis |
+| `round_N_claude.md` | Claude's round N statement |
+| `round_N_codex.md` | GPT's round N statement |
+| `factcheck_by_claude.md` | Claude's fact-check of GPT |
+| `factcheck_by_codex.md` | GPT's fact-check of Claude |
+| `report.html` | Final HTML verdict report |
 
-Phase 2: 자유 토론 (최대 5라운드)
-  ┌─ Round 1: Claude 선공 → Codex 반박
-  ├─ Round 2: Codex 선공 → Claude 반박
-  ├─ ...
-  └─ 수렴 판정: 새 논점 없으면 조기 종료
+### HTML Report Sections
 
-Phase 3: 교차 팩트체크
-  Claude → GPT 주장 상위 3개 검증
-  Codex  → Claude 주장 상위 3개 검증
+1. Header (topic, date, participants)
+2. Background
+3. Key issues (card layout)
+4. Debate highlights (per-round quotes)
+5. Fact-check results table
+6. **Final verdict** (clear winner, no "both sides have a point")
+7. Conclusion & takeaways
+8. Disclaimer
 
-Phase 4: 리포트 작성
-  별도 Reporter 에이전트가 전체 기록을 읽고 HTML 판정 리포트 생성
+## Design Principles
 
-Phase 5: 완료
-  리포트 브라우저 자동 열기 + 토론 요약 표시
-```
+- **No false balance**: the report must pick a winner based on evidence strength
+- **Cross-verification**: both sides fact-check the opponent's top 3 claims
+- **Early termination**: debate stops when arguments start repeating
+- **Parallel execution**: independent phases run concurrently for speed
 
-## 출력물
+## Timing
 
-### 토론 기록 (마크다운)
+- Typically 3-5 minutes depending on number of rounds
+- MCP mode is slightly faster than CLI fallback
 
-`/tmp/debate/YYYYMMDD_HHMMSS/` 디렉토리에 저장:
+## Notes
 
-| 파일 | 설명 |
-|------|------|
-| `topic.md` | 주제 및 핵심 논점 |
-| `rules.md` | 토론 규칙 |
-| `analysis_claude.md` | Claude 독립 분석 |
-| `analysis_codex.md` | GPT 독립 분석 |
-| `round_N_claude.md` | N라운드 Claude 발언 |
-| `round_N_codex.md` | N라운드 GPT 발언 |
-| `factcheck_by_claude.md` | Claude의 팩트체크 |
-| `factcheck_by_codex.md` | GPT의 팩트체크 |
-| `report.html` | 최종 HTML 판정 리포트 |
+- Debate logs are in `/tmp` and will be lost on reboot. Copy them if needed.
+- Investment/stock debates are for reference only, not financial advice.
+- Codex CLI uses unlimited tokens with ChatGPT Pro Plan auth; API key usage is billed.
 
-### HTML 리포트 구조
-
-1. 헤더 (주제, 날짜, 참가자)
-2. 주제 배경
-3. 핵심 쟁점 요약 (카드 형태)
-4. 토론 하이라이트 (라운드별 핵심 발언 인용)
-5. 팩트체크 결과표
-6. 최종 판정 (승자와 이유)
-7. 결론 및 시사점
-8. 면책 조항
-
-## 소요 시간
-
-- 일반적으로 3-5분 (라운드 수에 따라)
-- MCP 모드가 CLI fallback보다 약간 빠름
-
-## 주의사항
-
-- 토론 기록은 `/tmp`에 저장되므로 재부팅 시 사라집니다. 보관이 필요하면 별도로 복사하세요.
-- 주식/투자 관련 토론 결과는 참고용이며 투자 조언이 아닙니다.
-- Codex CLI는 ChatGPT Pro Plan 인증 시 무제한 토큰, API 키 사용 시 과금됩니다.
-
-## 라이선스
+## License
 
 MIT
 
-## 관련 프로젝트
+## Related
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 - [OpenAI Codex CLI](https://github.com/openai/codex)

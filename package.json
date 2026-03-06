@@ -1,0 +1,31 @@
+{
+  "name": "claude-skill-debate",
+  "version": "1.0.0",
+  "description": "Claude vs GPT multi-turn AI debate skill for Claude Code with cross fact-checking and HTML report generation",
+  "type": "module",
+  "bin": {
+    "claude-skill-debate": "install.mjs"
+  },
+  "files": [
+    "SKILL.md",
+    "install.mjs"
+  ],
+  "keywords": [
+    "claude",
+    "claude-code",
+    "claude-skill",
+    "codex",
+    "gpt",
+    "debate",
+    "ai-debate",
+    "fact-check",
+    "openai"
+  ],
+  "author": "Yunseob Shin <ysshin@dainus.ai>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YunseobShin/claude-skill-debate.git"
+  },
+  "homepage": "https://github.com/YunseobShin/claude-skill-debate#readme"
+}
