@@ -1,6 +1,6 @@
 {
   "name": "claude-skill-debate",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Claude vs GPT multi-turn AI debate skill for Claude Code with cross fact-checking and HTML report generation",
   "type": "module",
   "bin": {
