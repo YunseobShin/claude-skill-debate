@@ -186,6 +186,6 @@ echo "리포트: {DEBATE_DIR}/report.html"
 ## 주의사항
 
 - 전체 토론에 약 3-5분 소요될 수 있음 (라운드 수에 따라)
-- Codex 호출은 ChatGPT Pro Plan 인증 사용 (API 과금 아님)
+- Codex 호출은 ChatGPT Plus/Pro Plan 인증 사용 (API 과금 아님)
 - 토론 기록은 /tmp에 저장되므로 재부팅 시 사라짐. 보관 필요시 별도 복사
 - 주식/투자 관련 토론은 참고용이며 투자 조언이 아님을 리포트에 명시

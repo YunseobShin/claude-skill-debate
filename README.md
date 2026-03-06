@@ -28,7 +28,7 @@ That's it. The skill file is copied to `~/.claude/skills/debate/SKILL.md` and re
 ### Codex CLI Auth
 
 ```bash
-# Option 1: ChatGPT Pro Plan (unlimited tokens)
+# Option 1: ChatGPT Plus / Pro Plan login
 codex auth login
 
 # Option 2: API key (usage-based billing)
@@ -142,7 +142,7 @@ All debate artifacts are saved to `/tmp/debate/YYYYMMDD_HHMMSS/`:
 
 - Debate logs are in `/tmp` and will be lost on reboot. Copy them if needed.
 - Investment/stock debates are for reference only, not financial advice.
-- Codex CLI uses unlimited tokens with ChatGPT Pro Plan auth; API key usage is billed.
+- Codex CLI works with ChatGPT Plus or Pro Plan auth; API key usage is billed separately.
 
 ## License
 
