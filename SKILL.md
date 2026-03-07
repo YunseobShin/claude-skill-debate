@@ -1,191 +1,225 @@
 ---
 name: debate
 description: |
-  Claude와 Codex(GPT)가 특정 주제에 대해 멀티턴 토론을 벌이고, 팩트체크 후 HTML 리포트를 생성하는 스킬.
-  "/debate", "토론시켜", "AI 토론", "두 AI한테 물어봐", "debate" 등의 요청 시 사용.
-  주식, 기술 전망, 정책 분석, 제품 비교 등 의견이 갈릴 수 있는 주제에 최적화.
+  Claude and Codex(GPT) conduct a structured multi-turn debate on any topic, then generate a fact-checked HTML report.
+  Trigger on: "/debate", "debate this", "AI debate", "ask both AIs", or any Korean equivalents.
+  Optimized for topics with divergent opinions: stocks, tech outlook, policy analysis, product comparisons.
 user_invocable: true
 ---
 
 # AI Debate Report Skill
 
-Claude(Anthropic)와 Codex/GPT(OpenAI)가 주제에 대해 토론하고, 별도 Reporter가 판정 리포트를 작성한다.
+Claude (Anthropic) and Codex/GPT (OpenAI) debate a topic, then a separate Reporter agent writes a verdict report.
 
-## 사용법
+## Usage
 
 ```
-/debate <주제>
+/debate <topic>
 ```
 
-예시:
+Examples:
 ```
-/debate 삼성전자 2026년 하반기 주가 전망
-/debate React vs Vue 2026년 신규 프로젝트 기준
-/debate AI가 프로그래머를 대체할 수 있는가
-/debate 의료 AI SaMD 규제 완화 찬반
+/debate Samsung Electronics H2 2026 stock outlook
+/debate React vs Vue for new projects in 2026
+/debate Can AI replace programmers?
+/debate Medical AI SaMD deregulation pros and cons
 ```
 
-## 실행 절차
+## Required Artifacts
 
-### Phase 0: 준비
+Every execution MUST produce these files in `$DEBATE_DIR`:
 
-1. 작업 디렉토리 생성:
+| File | Phase | Description |
+|------|-------|-------------|
+| `topic.md` | 0 | Merged key issues from both sides |
+| `rules.md` | 0 | Debate rules |
+| `analysis_claude.md` | 1 | Claude independent analysis |
+| `analysis_codex.md` | 1 | Codex independent analysis |
+| `round_{N}_claude.md` | 2 | Claude round N statement |
+| `round_{N}_codex.md` | 2 | Codex round N statement |
+| `factcheck_by_claude.md` | 3 | Claude fact-checks GPT claims |
+| `factcheck_by_codex.md` | 3 | GPT fact-checks Claude claims |
+| `report.html` | 4 | Final HTML verdict report |
+
+## Procedure
+
+### Phase 0: Setup
+
+1. Create working directory:
 ```bash
 DEBATE_DIR="/tmp/debate/$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$DEBATE_DIR"
 ```
 
-2. 주제에서 핵심 논점 3-5개를 도출하여 `$DEBATE_DIR/topic.md`에 저장.
+2. **Neutralized issue framing** (prevents single-side framing bias):
+   - Call Claude subagent AND Codex **in parallel**, each proposing 3-5 key issues independently.
+   - Merge both sides' proposed issues, deduplicate, and finalize 3-5 issues in `$DEBATE_DIR/topic.md`.
 
-3. 토론 규칙 문서 `$DEBATE_DIR/rules.md` 생성:
+3. Generate debate rules document `$DEBATE_DIR/rules.md`:
 ```markdown
 # Debate Rules
-- 주제: {주제}
-- 핵심 논점: {논점 리스트}
-- 각 발언은 500단어 이내
-- 주장에는 반드시 근거(데이터, 사례, 논리)를 포함
-- 상대방 주장을 인용하며 반박할 것
-- 새로운 논점 없이 반복하면 토론 종료
+- Topic: {topic}
+- Key issues: {issue list}
+- Each statement: 500 words max
+- Claims must include evidence (data, cases, logic)
+- Quote and rebut opponent's claims
+- Debate ends when no new arguments emerge (requires mutual agreement)
 ```
 
-### Phase 1: 독립 분석 (병렬)
+### Phase 1: Independent Analysis (parallel)
 
-Claude 서브에이전트(Agent 도구)와 Codex MCP를 **동시에** 호출하여 각자 독립 분석을 수행한다.
+Call Claude subagent (Agent tool) and Codex MCP **simultaneously** for independent analysis.
 
-#### Claude 측 (Agent 도구)
-Agent 도구로 서브에이전트를 생성한다:
+#### Claude side (Agent tool)
 ```
-프롬프트: "다음 주제에 대해 독자적으로 분석하라. 데이터와 근거를 포함한 500-800단어 분석문을 작성하라.
-주제: {주제}
-논점: {논점 리스트}
-결과를 {DEBATE_DIR}/analysis_claude.md 에 저장하라."
+"Analyze the following topic independently. Write a 500-800 word analysis with data and evidence.
+Topic: {topic}
+Issues: {issue list}
+Save to {DEBATE_DIR}/analysis_claude.md."
 ```
 
-#### Codex 측 (MCP 도구 또는 CLI Fallback)
+#### Codex side (MCP tool or CLI Fallback)
 
-**방법 1: MCP 도구** (`mcp__codex__codex`)가 있는 경우:
+**Method 1: MCP tool** (`mcp__codex__codex`) if available:
 ```
-prompt: "다음 주제에 대해 독자적으로 분석하라. 데이터와 근거를 포함한 500-800단어 분석문을 작성하라.
-주제: {주제}
-논점: {논점 리스트}
-마크다운 형식으로 응답하라."
+prompt: "Analyze the following topic independently. Write a 500-800 word analysis with data and evidence.
+Topic: {topic}
+Issues: {issue list}
+Respond in markdown."
 sandbox: "read-only"
 cwd: "{DEBATE_DIR}"
 ```
-응답의 `content`를 `{DEBATE_DIR}/analysis_codex.md`에 저장한다.
-`threadId`를 기록해둔다 (이후 멀티턴에 사용).
+Save response `content` to `{DEBATE_DIR}/analysis_codex.md`.
+Record `threadId` for multi-turn use.
 
-**방법 2: CLI Fallback** (MCP가 없는 경우):
+**Method 2: CLI Fallback** (if no MCP):
 ```bash
 codex exec --full-auto --sandbox read-only --skip-git-repo-check \
-  -o "$DEBATE_DIR/analysis_codex.md" "<프롬프트>"
-```
-CLI 모드에서는 멀티턴이 불가하므로, 매 라운드마다 이전 토론 전체 컨텍스트를 프롬프트에 포함한다.
-
-### Phase 2: 자유 토론 (최대 5라운드)
-
-각 라운드는 다음 순서로 진행된다:
-
-#### 라운드 N (홀수: Claude 선공, 짝수: Codex 선공)
-
-**Step 1: 선공 측 발언**
-
-선공이 Claude인 경우:
-- 이전 라운드의 상대방 발언 + 독립분석을 컨텍스트로 제공
-- Agent 도구로 서브에이전트 호출:
-```
-"상대방(GPT)의 분석/발언을 읽고 반박 또는 보충하라. 새로운 근거를 제시하라.
-상대방 발언: {이전 codex 발언}
-500단어 이내로 작성. {DEBATE_DIR}/round_{N}_claude.md 에 저장."
+  -o "$DEBATE_DIR/analysis_codex.md" "<prompt>"
 ```
 
-선공이 Codex인 경우:
-- MCP: `mcp__codex__codex-reply`로 이전 threadId에 이어서 호출
-- CLI: `codex exec --full-auto --sandbox read-only --skip-git-repo-check`로 전체 컨텍스트 포함 호출
+**CLI token management**: In CLI mode, multi-turn is unavailable, so full prior context must be included in each prompt. To prevent context explosion:
+- For rounds 1-2: include full prior statements.
+- For rounds 3+: summarize each prior statement to 150 words max before inclusion.
+- Total context passed to Codex CLI should not exceed 4,000 words per prompt.
 
-**Step 2: 후공 측 발언** (같은 방식, 역할 반전)
+### Phase 2: Free Debate (max 5 rounds)
 
-**Step 3: 수렴 판정**
+Each round proceeds as follows:
 
-Claude가 이번 라운드의 양쪽 발언을 읽고 판단한다:
-- 새로운 논점이나 근거가 제시되었는가?
-- 양쪽이 같은 주장을 반복하고 있는가?
+#### Round N (odd: Claude first, even: Codex first)
 
-새 논점이 없으면 토론을 조기 종료한다.
+**Step 1: First speaker's statement**
 
-### Phase 3: 팩트체크
-
-토론 종료 후, 양쪽이 상대방의 핵심 주장 상위 3개를 선별하여 검증한다.
-
-#### Claude의 팩트체크
-Agent 도구로 서브에이전트 호출:
+If Claude goes first:
+- Provide opponent's prior statement + independent analysis as context
+- Agent tool subagent call:
 ```
-"Codex(GPT)의 토론 전체 발언에서 핵심 주장 3개를 선별하고,
-각 주장의 근거가 타당한지 검증하라.
-검증 결과를 [확인됨/반박됨/미검증] 으로 판정하고 이유를 작성하라.
-{DEBATE_DIR}/factcheck_by_claude.md 에 저장."
+"Read the opponent (GPT)'s analysis/statement and rebut or supplement. Provide new evidence.
+Opponent statement: {prior codex statement}
+Write within 500 words. Save to {DEBATE_DIR}/round_{N}_claude.md."
 ```
 
-#### Codex의 팩트체크
-MCP 또는 CLI로 호출:
+If Codex goes first:
+- MCP: `mcp__codex__codex-reply` continuing the prior threadId
+- CLI: `codex exec --full-auto --sandbox read-only --skip-git-repo-check` with full context (apply summarization for rounds 3+)
+
+**Step 2: Second speaker's statement** (same approach, roles reversed)
+
+**Step 3: Convergence check (bilateral consensus)**
+
+Both sides independently judge whether to continue:
+
+1. Ask Claude subagent: "Were new arguments or evidence presented this round? Respond with [CONTINUE] or [CONVERGED]."
+2. Ask Codex the same question (MCP or CLI).
+3. **End debate only if BOTH sides say [CONVERGED].**
+4. If either says [CONTINUE], proceed to the next round.
+
+This prevents one side from unilaterally ending the debate at a strategically favorable moment.
+
+### Phase 3: Fact-check
+
+After debate ends, each side fact-checks the opponent's top 3 claims. Run both in parallel.
+
+#### Claude's fact-check
+Agent tool subagent call:
 ```
-"Claude의 토론 전체 발언에서 핵심 주장 3개를 선별하고,
-각 주장의 근거가 타당한지 검증하라.
-검증 결과를 [확인됨/반박됨/미검증] 으로 판정하고 이유를 작성하라.
-마크다운 형식으로 응답."
-```
-응답을 `{DEBATE_DIR}/factcheck_by_codex.md`에 저장.
-
-### Phase 4: 리포트 작성
-
-**별도 Reporter 서브에이전트**를 Agent 도구로 생성한다.
-토론에 참여하지 않은 새로운 에이전트가 전체 기록을 읽고 리포트를 작성한다.
-
-Reporter 프롬프트:
-```
-너는 토론 심판이자 리포터다. 아래 토론 기록 전체를 읽고 HTML 리포트를 작성하라.
-
-## 절대 규칙
-- 양비론 금지. "양쪽 다 일리가 있다"는 결론은 허용하지 않는다.
-- 근거가 더 강한 쪽의 손을 명확히 들어라.
-- 동점인 경우에만 그 이유를 구체적으로 명시하되, 억지로 균형을 맞추지 마라.
-- 팩트체크에서 반박된 주장은 해당 측의 감점 요소로 반영하라.
-
-## 리포트 구조 (HTML)
-1. 헤더: 주제, 날짜, 참가자 (Claude vs GPT)
-2. 주제 배경 (200자 이내)
-3. 핵심 쟁점 요약 (3-5개, 카드 형태)
-4. 토론 하이라이트 (라운드별 핵심 발언 인용)
-5. 팩트체크 결과표 (주장 | 판정 | 근거)
-6. 최종 판정: 승자와 이유 (또는 근소한 차이면 그 설명)
-7. 결론 및 시사점 (독자가 가져갈 핵심 메시지)
-
-## 스타일
-- 전문적이면서 읽기 쉬운 톤
-- 데이터와 인용으로 뒷받침
-- 시각적으로 깔끔한 HTML (Tailwind CSS CDN 사용)
-- 다크모드 지원
-
-## 토론 기록
-{DEBATE_DIR 내 모든 파일 내용을 여기에 삽입}
-
-리포트를 {DEBATE_DIR}/report.html 에 저장하라.
+"Select the top 3 key claims from Codex (GPT)'s entire debate statements.
+Verify whether each claim's evidence is sound.
+Rate each as [Confirmed / Refuted / Unverified] with reasoning.
+Each fact-check entry must include:
+- At least 80 words of analysis
+- Specific data sources or calculations where applicable
+Save to {DEBATE_DIR}/factcheck_by_claude.md."
 ```
 
-### Phase 5: 완료
+#### Codex's fact-check
+MCP or CLI call:
+```
+"Select the top 3 key claims from Claude's entire debate statements.
+Verify whether each claim's evidence is sound.
+Rate each as [Confirmed / Refuted / Unverified] with reasoning.
+Each fact-check entry must include:
+- At least 80 words of analysis
+- Specific data sources or calculations where applicable
+Respond in markdown."
+```
+Save response to `{DEBATE_DIR}/factcheck_by_codex.md`.
 
-1. 리포트 파일 경로를 사용자에게 안내
-2. 가능하면 브라우저로 자동 열기:
+### Phase 4: Report
+
+Create a **separate Reporter subagent** via the Agent tool.
+A new agent that did NOT participate in the debate reads the full record and writes the report.
+
+Reporter prompt:
+```
+You are a debate judge and reporter. Read the full debate record below and write an HTML report.
+
+## Absolute Rules
+- No false balance. "Both sides have merit" conclusions are NOT allowed.
+- Clearly side with whichever side has stronger evidence.
+- Only if genuinely tied, explain exactly why, but never force artificial balance.
+- Refuted claims in fact-check MUST be reflected as deductions for that side.
+- Evaluate fact-check quality: consider depth of analysis, number of sources cited, and specificity of evidence. A longer, more detailed fact-check with primary sources carries more weight than a brief assessment.
+- DEBIASING: Do NOT trust Claude's claims more than GPT's simply because the Reporter is a Claude subagent. Treat both sides with equal scrutiny. If anything, apply extra skepticism to Claude's claims to compensate for potential in-group bias.
+
+## Report Structure (HTML)
+1. Header: topic, date, participants (Claude vs GPT)
+2. Topic background (200 chars max)
+3. Key issues summary (3-5 cards)
+4. Debate highlights (key quotes per round)
+5. Fact-check results table (Claim | Verdict | Evidence)
+6. Final verdict: winner and reasoning (or close-call explanation)
+7. Conclusion and implications (key takeaway for the reader)
+8. Confidence level: state verdict confidence (High/Medium/Low) and list unresolved points
+
+## Style
+- Professional yet readable tone
+- Backed by data and quotes
+- Clean HTML with Tailwind CSS CDN
+- Dark mode support
+- No em dashes
+
+## Debate Record
+{Insert all file contents from DEBATE_DIR here}
+
+Save report to {DEBATE_DIR}/report.html.
+```
+
+### Phase 5: Completion
+
+1. Show report file path to user
+2. Try to open in browser:
 ```bash
 explorer.exe "{DEBATE_DIR}/report.html" 2>/dev/null || \
 open "{DEBATE_DIR}/report.html" 2>/dev/null || \
-echo "리포트: {DEBATE_DIR}/report.html"
+echo "Report: {DEBATE_DIR}/report.html"
 ```
-3. 토론 요약 (2-3줄)을 사용자에게 표시
+3. Display debate summary (2-3 lines) to user
 
-## 주의사항
+## Notes
 
-- 전체 토론에 약 3-5분 소요될 수 있음 (라운드 수에 따라)
-- Codex 호출은 ChatGPT Plus/Pro Plan 인증 사용 (API 과금 아님)
-- 토론 기록은 /tmp에 저장되므로 재부팅 시 사라짐. 보관 필요시 별도 복사
-- 주식/투자 관련 토론은 참고용이며 투자 조언이 아님을 리포트에 명시
+- Full debate takes roughly 3-5 minutes depending on round count
+- Codex calls use ChatGPT Pro Plan authentication (not API billing)
+- Debate records are stored in /tmp and will be lost on reboot; copy elsewhere if needed
+- Investment-related debates must include a disclaimer: not financial advice
